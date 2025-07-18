@@ -1,7 +1,31 @@
+
+///
+/// Windows NT header or PE header
+/// Win32 API structure, which binds special
+/// parts "tables" 
+/// 
+/// `nt_signature` field not depends on
+/// architecture specific. 
+/// (means: not depends on BYTE/WORD ordering or endiannes)
+/// 
+#[repr(C)]
+pub struct ImageNTHeader32 {
+    pub nt_magic: u32,
+    pub nt_file_header: ImageFileHeader,
+    pub nt_optional_header: ImageOptionalHeader32
+}
+
+#[repr(C)]
+pub struct ImageNTHeader64 {
+    pub nt_magic: u32,
+    pub nt_file_header: ImageFileHeader,
+    pub nt_optional_header: ImageOptionalHeader64
+}
 ///
 /// Important part for each Portable Executable file
 /// names like "COFF header" or "file header".
 /// 
+#[repr(C)]
 pub struct ImageFileHeader {
     pub e_machine: u16,
     pub e_number_of_sections: u16,
@@ -17,6 +41,7 @@ pub struct ImageFileHeader {
 /// this structure. That's why it names "Optional"
 /// Other drivers/dlls/executables must have this part.
 /// 
+#[repr(C)]
 pub struct ImageOptionalHeader32 {
     pub e_magic: u16, // PE32/+ sign
     pub e_linker_major: u8,
@@ -52,6 +77,7 @@ pub struct ImageOptionalHeader32 {
     pub e_number_of_directories: u32,
     pub e_directories: [ImageDirectory; DIRECTORIES_COUNT] // always 16 in Optional header part
 }
+#[repr(C)]
 pub struct ImageOptionalHeader64 {
     pub e_magic: u16, // PE32/+ sign
     pub e_linker_major: u8,
@@ -91,6 +117,7 @@ pub struct ImageOptionalHeader64 {
 /// Logical parts/segments of PE image
 /// which stores in file sections 
 /// 
+#[repr(C)]
 pub struct ImageDirectory {
     d_virtual_address: u32,
     d_size: u32
@@ -126,6 +153,7 @@ pub const DIRECTORY_COM_DESCRIPTOR: u8 = 0x0E;
 /// All sections has 8 bytes long CSTR name.
 /// ['\0', '\0', '\0', 'a', 't', 'a', 'd', '.'] -> ".data"
 /// 
+#[repr(C)]
 pub struct ImageSectionHeader {
     pub s_name: [u8; 8],
     pub s_misc: ImageSectionMisc,
@@ -138,15 +166,17 @@ pub struct ImageSectionHeader {
     pub s_number_of_linenumbers: u16,
     pub s_characteristics: u32
 }
+#[repr(C)]
 pub union ImageSectionMisc {
     pub m_physical_address: u32,
     pub m_virtual_size: u32
 }
-
+#[repr(C)]
 pub union DummyUnionName {
     pub n_characteristics: u32,
     pub n_original_first_thunk: u32 // <-- procedures array
 }
+#[repr(C)]
 pub struct ImageImportDescriptor {
     pub i_dummy_union_name: DummyUnionName,
     pub i_time_stamp: u32,
@@ -154,6 +184,7 @@ pub struct ImageImportDescriptor {
     pub i_name_rva: u32,    // <-- DLL name rva.
     pub i_first_thunk: u32  // <-- position in IAT
 }
+#[repr(C)]
 pub struct ImageImportByName {
     pub i_hint: u16,
     pub i_name: [u8; 1]
