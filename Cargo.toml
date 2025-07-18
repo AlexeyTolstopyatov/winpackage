@@ -1,0 +1,11 @@
+[package]
+name = "winpackage"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+# Win32 API import
+windows = { version = "0.54" }
+# CLI argv parser...
+clap = { version = "4.5.20", features = ["derive"] }
