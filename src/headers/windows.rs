@@ -108,7 +108,7 @@ pub const DIRECTORY_ARCHITECTURE: u8 = 0x07; // modern translation. Arch specifi
 pub const DIRECTORY_GLOBAL_POINTER: u8 = 0x08;
 pub const DIRECTORY_THREAD_STORAGE: u8 = 0x09;
 pub const DIRECTORY_LOAD_CONFIG: u8 = 0x0A;
-pub const DIRECTORY_IMPORT_BOUNDED: u8 = 0x0B;
+pub const DIRECTORY_IMPORT_BOUND: u8 = 0x0B;
 pub const DIRECTORY_IMPORT_ADDRESS_TABLE: u8 = 0x0C;
 pub const DIRECTORY_IMPORT_DELAYED: u8 = 0x0D;
 pub const DIRECTORY_COM_DESCRIPTOR: u8 = 0x0E;
@@ -126,16 +126,35 @@ pub const DIRECTORY_COM_DESCRIPTOR: u8 = 0x0E;
 /// All sections has 8 bytes long CSTR name.
 /// ['\0', '\0', '\0', 'a', 't', 'a', 'd', '.'] -> ".data"
 /// 
-pub struct ImageSectionsHeader {
-    s_name: [u8; 8],
-    s_misc: ImageSectionMisc,
-    s_virtual_address: u32,
-    s_size_of_raw_data: u32,
-    s_pointer_to_raw_data: u32,
-    s_pointer_to_relocations: u32,
-    
+pub struct ImageSectionHeader {
+    pub s_name: [u8; 8],
+    pub s_misc: ImageSectionMisc,
+    pub s_virtual_address: u32,
+    pub s_size_of_raw_data: u32,
+    pub s_pointer_to_raw_data: u32,
+    pub s_pointer_to_relocations: u32,
+    pub s_pointer_to_linenumbers: u32,
+    pub s_number_of_relocations: u16,
+    pub s_number_of_linenumbers: u16,
+    pub s_characteristics: u32
 }
 pub union ImageSectionMisc {
-    m_physical_address: u32,
-    m_virtual_size: u32
+    pub m_physical_address: u32,
+    pub m_virtual_size: u32
+}
+
+pub union DummyUnionName {
+    pub n_characteristics: u32,
+    pub n_original_first_thunk: u32 // <-- procedures array
+}
+pub struct ImageImportDescriptor {
+    pub i_dummy_union_name: DummyUnionName,
+    pub i_time_stamp: u32,
+    pub i_forwarder_chain: u32,
+    pub i_name_rva: u32,    // <-- DLL name rva.
+    pub i_first_thunk: u32  // <-- position in IAT
+}
+pub struct ImageImportByName {
+    pub i_hint: u16,
+    pub i_name: [u8; 1]
 }
