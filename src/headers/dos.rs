@@ -33,3 +33,4 @@ pub struct ImageDOSHeader {
     pub e_res: [u16; 10],
     pub e_lfanew: u32 // ULONG file address NE magic
 }
+pub const IMAGE_DOS_SIGNATURE: u16 = 0x5A4D;

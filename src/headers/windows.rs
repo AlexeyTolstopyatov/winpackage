@@ -37,7 +37,11 @@ pub struct ImageFileHeader {
     pub e_size_of_optional_header: u16,
     pub e_characteristics: u16
 }
+pub const IMAGE_NT_SIGNATURE: usize = 0x00004550;
+pub const IMAGE_NT_32_SIGNATURE: u16 = 0x10B;
+pub const IMAGE_NT_64_SIGNATURE: u16 = 0x20B;
 pub const MACHINE_32BIT_FLAG: u16 = 0x1000;
+pub const NT_OPTIONAL_HEADER_OFFSET: usize = 0x18;
 
 ///
 /// Optional part of Windows NT header (see IMAGE_NT_HEADER in WinAPI)
