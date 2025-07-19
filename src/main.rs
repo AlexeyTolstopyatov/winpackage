@@ -1,12 +1,12 @@
 use std::io;
 
-use clap::Parser;
+use clap::{Parser};
 
 use crate::{
     args::WinPackageArgs, 
     headers::{
         dos::{self, ImageDOSHeader}, 
-        windows::{ImageNTHeader32, ImageNTHeader64}
+        windows::{ImageNTHeader32, ImageNTHeader64, ImageSectionHeader}
     }
 };
 
@@ -56,7 +56,7 @@ fn get_nt_header_32(image: &[u8]) -> io::Result<&ImageNTHeader32> {
     return Ok(nt_header_32);
 }
 ///
-/// Tries to deserialze only 32-bit PE image structures
+/// Tries to deserialze only 64-bit PE image structures
 /// returns Optional value of [ImageNTHeader32](headers::windows::ImageNTHeader32)
 /// struct
 /// 
@@ -108,12 +108,45 @@ fn get_nt_header_64(image: &[u8]) -> io::Result<&ImageNTHeader64> {
 /// 
 /// For real: UPX has own header (in example) which points
 /// on specific structures located in file.
-///  
-fn get_packed_section_32(image: &[u8], nt_header: &ImageNTHeader32) {
+/// 
+/// Hint: use smart pointers
+/// 
+fn get_packed_section_32<'struct_ref_time>(
+    image: &'struct_ref_time [u8], 
+    nt_header: &'struct_ref_time ImageNTHeader32) -> io::Result<&'struct_ref_time ImageSectionHeader> {
     
+    let sections_offset = 
+        nt_header as *const _ as usize - image.as_ptr() as usize
+        + std::mem::size_of::<ImageNTHeader32>();
+    
+    // headers_scope = N * section_head_len
+    let sections_count = nt_header.nt_file_header.e_number_of_sections as usize;
+    let sections_bytes = image
+        .get(sections_offset..(sections_offset + (sections_count * std::mem::size_of::<ImageSectionHeader>())))
+        .ok_or(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Unable to find sections scope"
+        ))?; // val like C# nullable ctx fields
+    
+    let sections_slice: &[ImageSectionHeader] = cast::unsafe_slice_cast::<ImageSectionHeader>(sections_bytes, sections_count);
+    let no_sections_err: io::Error = io::Error::new(
+        io::ErrorKind::NotFound,
+        "Unable to find PE sections"
+    );
+
+    return sections_slice
+        .iter() // cast Iterator<T> instance
+        .find(|h| h.s_name.starts_with(b".packed"))
+        .ok_or(no_sections_err);
 }
 
 fn main() {
+    // Necessary parts
+    // 
+    // 1) PE image structure checkout
+    // 2) Attack Attack!
+    // 3) .packed sections checkout
+    // 4) static imports existance
     let argv: WinPackageArgs = WinPackageArgs::parse();
 
 }
