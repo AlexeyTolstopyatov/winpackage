@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, path::PathBuf};
 
 use bytemuck::Zeroable;
 use clap::{Parser};
@@ -149,17 +149,19 @@ fn is_imports_static_exists_32(nt_header: &ImageNTHeader32) -> bool {
 fn is_imports_static_exists_64(nt_header: &ImageNTHeader64) -> bool {
     return nt_header.nt_optional_header.e_import_static_directory != ImageDirectory::zeroed();
 }
-
-fn load_decompressed_image (image: &[u8]) -> io::Result<*mut u8> {
-    let nt_header = get_nt_header_32(image);
-
-    if is_image_64_bit(&nt_header?.nt_file_header) {
-        // 64-bit code goes here
-    }
-    else {
-        // 32-bit code goes here
-    }
-
+///
+/// Decompress and load processed image in memory
+/// 
+fn load_decompressed_image(image: &[u8]) -> io::Result<*mut u8> {
+    let nt_header = match get_nt_header_64(image) {
+        Ok(result) => {
+            
+        },
+        Err(err) => {
+            
+        }
+    };
+    
     return Ok(());
 }
 
