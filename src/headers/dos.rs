@@ -30,5 +30,5 @@ pub struct ImageDOSHeader {
     pub e_oemid: u16,
     pub e_oeminfo: u16,
     pub e_res: [u16; 10],
-    pub e_lfanew: u16 // long file address NE magic
+    pub e_lfanew: u32 // ULONG file address NE magic
 }
