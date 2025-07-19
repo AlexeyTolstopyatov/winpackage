@@ -1,24 +1,23 @@
 use std::io;
 
+use bytemuck::Zeroable;
 use clap::{Parser};
 
 use crate::{
     args::WinPackageArgs, 
     headers::{
-        dos::{self, ImageDOSHeader}, 
-        windows::{ImageNTHeader32, ImageNTHeader64, ImageSectionHeader}
+        dos::ImageDOSHeader, 
+        windows::{ImageDirectory, ImageFileHeader, ImageNTHeader32, ImageNTHeader64, ImageSectionHeader}
     }
 };
 
 mod headers;
 mod args;
-mod cast;
+
 ///
 /// Tries to deserialze only 32-bit PE image structures
 /// returns Optional value of [ImageNTHeader32](headers::windows::ImageNTHeader32)
 /// struct
-/// 
-/// Contains unsafe scopes used for bytes reinterpretation
 /// 
 // try implement it more safe than C++ style
 fn get_nt_header_32(image: &[u8]) -> io::Result<&ImageNTHeader32> {
@@ -29,7 +28,7 @@ fn get_nt_header_32(image: &[u8]) -> io::Result<&ImageNTHeader32> {
             "Unable to deserialize image at 1 stage"
         ))?;
     
-    let dos_header = cast::unsafe_cast::<ImageDOSHeader>(dos_header);
+    let dos_header = bytemuck::from_bytes::<ImageDOSHeader>(dos_header);
 
     if dos_header.e_magic != 0x5A4D {
         // maybe obj or corrupted PE image
@@ -45,7 +44,7 @@ fn get_nt_header_32(image: &[u8]) -> io::Result<&ImageNTHeader32> {
                 "Unable to deserialize image at stage 2"
             ))?;
 
-    let nt_header_32 = cast::unsafe_cast::<ImageNTHeader32>(nt_header_32);
+    let nt_header_32 = bytemuck::from_bytes::<ImageNTHeader32>(nt_header_32);
 
     if nt_header_32.nt_magic != 0x00004550 {
         // really corrupted PE image
@@ -72,7 +71,7 @@ fn get_nt_header_64(image: &[u8]) -> io::Result<&ImageNTHeader64> {
                 "Unable to deserialize PE image at stage 1"
             ))?;
     
-    let dos_header = cast::unsafe_cast::<ImageDOSHeader>(dos_header_bytes);
+    let dos_header = bytemuck::from_bytes::<ImageDOSHeader>(dos_header_bytes);
     
     if dos_header.e_magic != 0x5A4D {
         return Err(io::Error::new(
@@ -87,7 +86,7 @@ fn get_nt_header_64(image: &[u8]) -> io::Result<&ImageNTHeader64> {
             "Unable to deserialize PE image at stage 2"
         ))?;
     
-    let nt_header = cast::unsafe_cast::<ImageNTHeader64>(nt_header_bytes);
+    let nt_header = bytemuck::from_bytes::<ImageNTHeader64>(nt_header_bytes);
     
     if nt_header.nt_magic != 0x00004550 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "signature PE not found"));
@@ -113,7 +112,7 @@ fn get_nt_header_64(image: &[u8]) -> io::Result<&ImageNTHeader64> {
 /// 
 fn get_packed_section_32<'struct_ref_time>(
     image: &'struct_ref_time [u8], 
-    nt_header: &'struct_ref_time ImageNTHeader32) -> io::Result<&'struct_ref_time ImageSectionHeader> {
+    nt_header: &ImageNTHeader32) -> io::Result<&'struct_ref_time ImageSectionHeader> {
     
     let sections_offset = 
         nt_header as *const _ as usize - image.as_ptr() as usize
@@ -126,9 +125,10 @@ fn get_packed_section_32<'struct_ref_time>(
         .ok_or(io::Error::new(
             io::ErrorKind::InvalidData,
             "Unable to find sections scope"
-        ))?; // val like C# nullable ctx fields
+        ))?;
     
-    let sections_slice: &[ImageSectionHeader] = cast::unsafe_slice_cast::<ImageSectionHeader>(sections_bytes, sections_count);
+    let sections_slice = bytemuck::cast_slice::<u8, ImageSectionHeader>(sections_bytes);
+
     let no_sections_err: io::Error = io::Error::new(
         io::ErrorKind::NotFound,
         "Unable to find PE sections"
@@ -140,6 +140,29 @@ fn get_packed_section_32<'struct_ref_time>(
         .ok_or(no_sections_err);
 }
 
+fn is_image_64_bit(coff_header: &ImageFileHeader) -> bool {
+    return (coff_header.e_machine & headers::windows::MACHINE_32BIT_FLAG) == 0;
+}
+fn is_imports_static_exists_32(nt_header: &ImageNTHeader32) -> bool {
+    return nt_header.nt_optional_header.e_import_static_directory != ImageDirectory::zeroed();
+}
+fn is_imports_static_exists_64(nt_header: &ImageNTHeader64) -> bool {
+    return nt_header.nt_optional_header.e_import_static_directory != ImageDirectory::zeroed();
+}
+
+fn load_decompressed_image (image: &[u8]) -> io::Result<*mut u8> {
+    let nt_header = get_nt_header_32(image);
+
+    if is_image_64_bit(&nt_header?.nt_file_header) {
+        // 64-bit code goes here
+    }
+    else {
+        // 32-bit code goes here
+    }
+
+    return Ok(());
+}
+
 fn main() {
     // Necessary parts
     // 
@@ -147,6 +170,5 @@ fn main() {
     // 2) Attack Attack!
     // 3) .packed sections checkout
     // 4) static imports existance
-    let argv: WinPackageArgs = WinPackageArgs::parse();
 
 }

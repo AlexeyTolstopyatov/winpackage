@@ -1,4 +1,3 @@
-#[derive(Debug)]
 ///
 /// Extended PC/MS-DOS header 
 /// 
@@ -6,6 +5,8 @@
 /// fields and special extended part added in
 /// next versions of MS/PC-DOS
 /// 
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::AnyBitPattern)]
 pub struct ImageDOSHeader {
     // Standard DOS header part (uses in BW-DOS)
     pub e_magic: u16,
