@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 
-winapi = { version = "*" }
+winapi = { version = "*", features = ["winnt", "errhandlingapi", "memoryapi"] }
 clap = { version = "4.5.20", features = ["derive"] }
 bytemuck ={ version = "*", features = ["derive"] } # <-- savve casting
 miniz_oxide = "0.7"
