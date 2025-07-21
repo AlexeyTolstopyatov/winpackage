@@ -1,5 +1,5 @@
 use crate::headers::{dos::{self, ImageDOSHeader}, windows::{self, *}};
-use std::{io, ptr::read};
+use std::io;
 use std::rc::Rc;
 // avoid the C/++ style => use pattern matching
 ///
@@ -62,7 +62,7 @@ impl NTHeaderType {
 fn try_get_nt_header(image: &[u8]) -> io::Result<NTHeaderType> {
     let mz_header = bytemuck::from_bytes::<ImageDOSHeader>(image
         .get(..std::mem::size_of::<ImageDOSHeader>())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid DOS header size"))?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "stopped: invalid DOS header size"))?
     );
 
     if mz_header.e_magic != dos::IMAGE_DOS_SIGNATURE {
@@ -81,25 +81,25 @@ fn try_get_nt_header(image: &[u8]) -> io::Result<NTHeaderType> {
             "stopped: PE image signature not compatible"
         ));
     }
-    let magic_offset = nt_header_offset + windows::NT_OPTIONAL_HEADER_OFFSET;
-    let magic_bytes = image.get(magic_offset..magic_offset + 2)
+    let optional_magic_offset = nt_header_offset + windows::NT_OPTIONAL_HEADER_OFFSET;
+    let optional_magic_bytes = image.get(optional_magic_offset..optional_magic_offset + 2)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "stopped: Optional header out of bounds"))?;
     
     // PE32/+ sign matching
-    match u16::from_le_bytes(magic_bytes.try_into().unwrap()) {
+    match u16::from_le_bytes(optional_magic_bytes.try_into().unwrap()) {
         windows::IMAGE_NT_32_SIGNATURE => {
-            let header = bytemuck::from_bytes::<ImageNTHeader32>(image
-                    .get(magic_offset..(magic_offset + 2)) // catch WORD sized scope
+            let header = *bytemuck::from_bytes::<ImageNTHeader32>(image
+                    .get(optional_magic_offset..std::mem::size_of::<ImageNTHeader32>()) 
                     .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "stopped: PE32 header incomplete"))?
             );
-            Ok(NTHeaderType::Machine32Bit(*header))
+            Ok(NTHeaderType::Machine32Bit(header))
         },
         windows::IMAGE_NT_64_SIGNATURE => {
-            let header = bytemuck::from_bytes(image
-                .get(magic_offset..(magic_offset + 2)) // catch WORD
+            let header = *bytemuck::from_bytes(image
+                .get(optional_magic_offset..std::mem::size_of::<ImageNTHeader64>())
                 .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "stopped: PE32+ header incomplete"))?
             );
-            Ok(NTHeaderType::Machine64Bit(*header))
+            Ok(NTHeaderType::Machine64Bit(header))
         }
         magic => Err(io::Error::new(io::ErrorKind::InvalidData, format!("stopped: signature extra mismatch {:X}", magic)))
     }
@@ -118,8 +118,6 @@ fn try_get_nt_header(image: &[u8]) -> io::Result<NTHeaderType> {
 /// For real: UPX has own header (in example) which points
 /// on specific structures located in file.
 /// 
-/// Hint: use smart pointers
-/// 
 fn try_get_packed_section(
     image: &[u8], 
     nt_header: &NTHeaderType) -> io::Result<Rc::<ImageSectionHeader>> {
@@ -134,14 +132,14 @@ fn try_get_packed_section(
         .get(sections_offset..(sections_offset + (sections_count * std::mem::size_of::<ImageSectionHeader>())))
         .ok_or(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Unable to find sections scope"
+            "stopped: unable to find sections scope"
         ))?;
     
     let sections_slice = bytemuck::cast_slice::<u8, ImageSectionHeader>(sections_bytes);
 
     let no_sections_err: io::Error = io::Error::new(
         io::ErrorKind::NotFound,
-        "Unable to find PE sections"
+        "stopped: unable to find PE sections"
     );
     let result = *sections_slice
             .iter() // cast Iterator<T> instance
@@ -187,14 +185,14 @@ fn try_decrypt_image(packed_section: ImageSectionHeader, image_base: &[u8], mask
 
     // warning.
     let decompressed = miniz_oxide::inflate::decompress_to_vec_zlib(compressed_data)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?; // <-- full report
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?; // <-- full report unpack_err instead
 
     match decompressed.len() != unpacked_size {
         true => {
             return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!(
-                        "Processed sizes are different\r\n\texpected: {}\r\n\tgot{}",
+                        "stopped: processed sizes are different\r\n\texpected: {}\r\n\tgot{}",
                         unpacked_size,
                         decompressed.len()
                     )
@@ -208,7 +206,7 @@ fn try_decrypt_image(packed_section: ImageSectionHeader, image_base: &[u8], mask
         .iter()
         .enumerate()
         .map(|(i, b)| b ^ mask[i % mask.len()].saturating_add(1))
-        .collect(); //.Select (x=>{})
+        .collect();
 
     return Ok(decrypted);
 
