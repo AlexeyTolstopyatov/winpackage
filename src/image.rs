@@ -1,7 +1,6 @@
 use winapi::um::{memoryapi::{VirtualAlloc, VirtualFree, VirtualProtect}, winnt::{MEM_RELEASE, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_READWRITE}};
 
 use crate::headers::{dos::{self, ImageDOSHeader}, windows::{self, *}};
-use crate::mem;
 
 use std::io;
 // avoid the C/++ style => use pattern matching
@@ -284,15 +283,14 @@ pub fn try_get_sections_slice(
 /// 
 fn calc_protection(characteristics: u32) -> u32 {
     match () {
-        _ if characteristics & winapi::um::winnt::IMAGE_SCN_MEM_EXECUTE != 0 => {
-            if characteristics & winapi::um::winnt::IMAGE_SCN_MEM_WRITE != 0 {
-                return winapi::um::winnt::PAGE_EXECUTE_READWRITE;
-            } else {
-                return winapi::um::winnt::PAGE_EXECUTE_READ;
-            }
+        _ if characteristics & winapi::um::winnt::IMAGE_SCN_MEM_EXECUTE != 0 => { 
+            return winapi::um::winnt::PAGE_EXECUTE_READ; // <-- avoid RWX flag.
         }
         _ if characteristics & winapi::um::winnt::IMAGE_SCN_MEM_WRITE != 0 => {
             return winapi::um::winnt::PAGE_READWRITE;
+        }
+        _ if characteristics & winapi::um::winnt::IMAGE_SCN_MEM_DISCARDABLE != 0 => {
+            return winapi::um::winnt::PAGE_READONLY;
         }
         _ => winapi::um::winnt::PAGE_READONLY
     }
@@ -309,15 +307,14 @@ fn calc_protection(characteristics: u32) -> u32 {
 /// \param `image` target program bytes slice. Apply it only after decryption procedure 
 /// 
 pub unsafe fn try_load_decompressed_image(image: &[u8]) -> io::Result<*mut u8> {
-    let dos_header = bytemuck::from_bytes::<ImageDOSHeader>(image
+    let dos_header = bytemuck::pod_read_unaligned::<ImageDOSHeader>(image
             .get(0..std::mem::size_of::<ImageDOSHeader>())
-            .and_then(|d| d.try_into().ok()) // <-- required aligned data
             .ok_or(io::Error::new(io::ErrorKind::InvalidData, "Unable to allocate DOS header space"))?
     );
     let nt_header = try_get_nt_header(image)?;
     let image_size = nt_header.get_image_size() as usize;
 
-    let mut __section_protect_flags: u32 = winapi::um::winnt::MEM_COMMIT | winapi::um::winnt::MEM_RESERVE;
+    let __section_protect_flags: u32 = winapi::um::winnt::MEM_COMMIT | winapi::um::winnt::MEM_RESERVE;
     
     let lp_image_base = unsafe {
         VirtualAlloc(std::ptr::null_mut(), image_size, __section_protect_flags, PAGE_READWRITE)
@@ -357,26 +354,40 @@ pub unsafe fn try_load_decompressed_image(image: &[u8]) -> io::Result<*mut u8> {
         let src_start = section.s_pointer_to_raw_data as usize;
         let src_end = src_start + section.s_size_of_raw_data as usize;
         let dst_start = section.s_virtual_address as usize;
-        let dst_end = dst_start + section.s_size_of_raw_data as usize;
-        
-        if dst_end > image_size || src_end > image.len() {
-            println!("\t skipped");
+        let dst_end = dst_start + section.m_virtual_size as usize;
+
+        if src_end > image.len() { // is exists?
+            println!("\t source out of bounds");
             continue;
         }
         
-        image_base_slice[dst_start..dst_end].copy_from_slice(
-            image
-                .get(src_start..src_end)
-                .ok_or(io::Error::new(io::ErrorKind::InvalidData, "Invalid section data"))?,
-        );
-        println!("\t iterated");
-    
+        if dst_end > image_size { // is alloc?
+            println!("\t destination out of bounds");
+            continue;
+        }
+        // copy ONLY `s_size_of_raw_data` bytes
+        // but section's capacity will `m_virtual_size`
+        let data = image.get(src_start..src_end)
+            .ok_or(io::Error::new(io::ErrorKind::InvalidData, "Invalid section data"))?;
+        image_base_slice[dst_start..dst_start + data.len()].copy_from_slice(data);
+        
+        // .bss idea: section's virtual space more than size_of_raw_data. 
+        if section.m_virtual_size > section.s_size_of_raw_data {
+            let zero_start = dst_start + section.s_size_of_raw_data as usize;
+            let zero_end = dst_start + section.m_virtual_size as usize;
+            if zero_end > image_size {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "Virtual size exceeds allocated memory"));
+            }
+            image_base_slice[zero_start..zero_end].fill(0);
+        }
+        println!("\t copied");
     }
     unsafe {
         match apply_section_protections(image_base_ptr, sections) {
             Ok(_) => (),
             Err(e) => {
                 VirtualFree(lp_image_base, image_size, MEM_RELEASE);
+                println!("Permissions not set. Memory released.");
                 return Err(e);
             }
         };
@@ -394,12 +405,10 @@ unsafe fn apply_section_protections(
         let section_start = unsafe { 
             base.add(section.s_virtual_address as usize) 
         };
-
-        let size = section.s_size_of_raw_data as usize;
-        
+        let size = section.m_virtual_size as usize;
         let protect = calc_protection(section.s_characteristics);
-        
         let mut old_protect: u32 = 0;
+        
         let result = unsafe { 
             VirtualProtect(
                 section_start as _,

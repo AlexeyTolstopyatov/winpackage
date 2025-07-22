@@ -1,7 +1,6 @@
 mod args;
 mod headers;
 mod image;
-mod mem;
 
 fn main() {
     
