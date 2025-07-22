@@ -1,9 +1,9 @@
-use winapi::um::{memoryapi::{VirtualAlloc, VirtualFree, VirtualProtect}, winnt::{MEM_RELEASE, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_READWRITE}};
+use winapi::um::{memoryapi::{VirtualAlloc, VirtualFree, VirtualProtect}, winnt::{MEM_RELEASE, PAGE_READWRITE}};
 
 use crate::headers::{dos::{self, ImageDOSHeader}, windows::{self, *}};
 
 use std::io;
-// avoid the C/++ style => use pattern matching
+
 ///
 /// Represents available types of IMAGE_NT_HEADER
 /// for required PE image.
@@ -11,7 +11,6 @@ use std::io;
 //  
 // https://doc.rust-lang.org/book/ch10-02-traits.html#returning-types-that-implement-traits
 // https://doc.rust-lang.org/book/ch06-02-match.html
-
 pub enum NTHeaderType {
     Machine32Bit(ImageNTHeader32),
     Machine64Bit(ImageNTHeader64),
